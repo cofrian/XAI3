@@ -1,0 +1,38 @@
+# Bike rental data: loading and transformations
+
+```{r bike-data-loading}
+bike_raw <- read.csv("data/day.csv")
+
+season_factor <- factor(bike_raw$season)
+season_matrix <- model.matrix(~ season_factor)[, -1, drop = FALSE]
+colnames(season_matrix) <- c("season_2", "season_3", "season_4")
+
+bike <- cbind(
+  bike_raw[, names(bike_raw) != "season"],
+  as.data.frame(season_matrix)
+)
+```
+
+```{r bike-transformations}
+bike$misty <- as.integer(bike$weathersit == 2)
+bike$RAIN <- as.integer(bike$weathersit %in% c(3, 4))
+bike$temp <- bike$temp * (39 + 8) - 8
+bike$hum <- bike$hum * 100
+bike$windspeed <- bike$windspeed * 67
+bike$days_since_2011 <- as.integer(as.Date(bike$dteday) - as.Date("2011-01-01"))
+
+bike_clean <- bike[, c(
+  "workingday",
+  "holiday",
+  "season_2",
+  "season_3",
+  "season_4",
+  "misty",
+  "RAIN",
+  "temp",
+  "hum",
+  "windspeed",
+  "days_since_2011",
+  "cnt"
+)]
+```
