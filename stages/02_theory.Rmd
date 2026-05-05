@@ -1,0 +1,9 @@
+# Theoretical background: Partial Dependence Plot
+
+This fragment contains the short theoretical explanation of PDPs and their limitations (correlations, averaging over distributions, etc.).
+
+Key points:
+
+- PDP shows marginal effect of one or two variables on model predictions.
+- Be cautious with correlated features — PDP may evaluate unrealistic combinations.
+- Use rug marks / density plots to show support of the features.
