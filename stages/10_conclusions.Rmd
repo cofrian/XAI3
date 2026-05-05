@@ -1,0 +1,9 @@
+# Conclusions and ModelOps considerations
+
+This fragment contains the conclusions, deployment notes and ModelOps checklist (fixed seeds, artifact saving, reproducible transforms, version control).
+
+Key points for deployment:
+
+- Keep transformation code in a script or package for production preprocessing.
+- Save the trained Random Forest object and include a schema for input validation.
+- Monitor performance drift and re-train periodically.
