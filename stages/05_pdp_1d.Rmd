@@ -1,0 +1,33 @@
+# One-dimensional PDPs for bike rental demand
+
+```{r helper-pdp-1d}
+plot_pdp_1d <- function(pdp_data, feature, title, x_label, y_label, rug_data = NULL) {
+  p <- ggplot(pdp_data, aes(x = .data[[feature]], y = yhat)) +
+    geom_line(size = 1, color = "#2D4F73") +
+    labs(
+      title = title,
+      x = x_label,
+      y = y_label
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(
+      plot.title = element_text(face = "bold"),
+      panel.grid.minor = element_blank()
+    )
+
+  if (!is.null(rug_data)) {
+    p <- p + geom_rug(
+      data = rug_data,
+      aes(x = .data[[feature]]),
+      inherit.aes = FALSE,
+      sides = "b",
+      alpha = 0.25,
+      color = "#5A4635"
+    )
+  }
+
+  return(p)
+}
+```
+
+Sections for `days_since_2011`, `temp`, `hum`, and `windspeed` are included in the main notebook; this fragment contains the helper and can be used to run each 1D PDP independently.
