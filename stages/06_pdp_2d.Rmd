@@ -1,0 +1,23 @@
+# Two-dimensional PDP: temperature and humidity
+
+```{r bike-pdp-2d-sample}
+set.seed(123)
+bike_sample_50 <- bike_clean[sample(nrow(bike_clean), 50), ]
+
+kable(
+  summary(bike_sample_50[, c("temp", "hum", "cnt")]),
+  caption = "Summary of the random sample of 50 observations used for the 2D PDP."
+)
+```
+
+```{r bike-pdp-2d-computation}
+pdp_bike_temp_hum <- partial(
+  object = bike_rf,
+  pred.var = c("temp", "hum"),
+  train = bike_sample_50[, names(bike_sample_50) != "cnt"],
+  grid.resolution = 12,
+  progress = "none"
+)
+
+kable(head(pdp_bike_temp_hum), caption = "First rows of the 2D PDP grid for temperature and humidity.")
+```
