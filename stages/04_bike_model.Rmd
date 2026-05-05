@@ -1,0 +1,30 @@
+# Bike Random Forest model and quality
+
+```{r bike-random-forest}
+set.seed(123)
+
+bike_rf <- randomForest(
+  cnt ~ .,
+  data = bike_clean,
+  ntree = 500,
+  importance = TRUE
+)
+
+bike_rf
+```
+
+```{r bike-model-quality}
+bike_quality <- regression_metrics(
+  actual = bike_clean$cnt,
+  predicted = bike_rf$predicted
+)
+
+bike_quality$Model <- "Bike rental Random Forest"
+bike_quality <- bike_quality[, c("Model", "RMSE", "MAE", "R2")]
+
+kable(
+  bike_quality,
+  digits = 3,
+  caption = "Out-of-bag quality metrics for the bike rental Random Forest."
+)
+```
