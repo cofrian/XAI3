@@ -1,0 +1,22 @@
+# House price data: loading and sampling
+
+```{r house-data}
+house_raw <- read.csv("data/kc_house_data.csv")
+
+house_features <- c(
+  "bedrooms",
+  "bathrooms",
+  "sqft_living",
+  "sqft_lot",
+  "floors",
+  "yr_built"
+)
+
+house_model_data <- house_raw[, c(house_features, "price")]
+house_model_data <- na.omit(house_model_data)
+
+set.seed(123)
+house_sample <- house_model_data[sample(nrow(house_model_data), 2000), ]
+
+kable(head(house_sample), caption = "Random sample of 2000 observations used for house price modeling.")
+```
