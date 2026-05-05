@@ -1,0 +1,30 @@
+# House Random Forest model and quality
+
+```{r house-random-forest}
+set.seed(123)
+
+house_rf <- randomForest(
+  price ~ bedrooms + bathrooms + sqft_living + sqft_lot + floors + yr_built,
+  data = house_sample,
+  ntree = 500,
+  importance = TRUE
+)
+
+house_rf
+```
+
+```{r house-model-quality}
+house_quality <- regression_metrics(
+  actual = house_sample$price,
+  predicted = house_rf$predicted
+)
+
+house_quality$Model <- "House price Random Forest"
+house_quality <- house_quality[, c("Model", "RMSE", "MAE", "R2")]
+
+kable(
+  house_quality,
+  digits = 3,
+  caption = "Out-of-bag quality metrics for the house price Random Forest."
+)
+```

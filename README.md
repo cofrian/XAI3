@@ -52,17 +52,14 @@ How to publish to GitHub (example commands)
 2. On your local machine, run these commands from the project root:
 
 ```
-git init
-git add .
-git commit -m "Initial commit: add project files and data"
-git branch -M main
-git remote add origin https://github.com/<your-username>/<repo-name>.git
-git push -u origin main
+Git initialization and push steps are already included in this repository. To replicate locally use:
 
-# Create and push the backup branch
-git checkout -b backup
-git commit --allow-empty -m "Checkpoint: backup branch created"
-git push -u origin backup
+git init
+ git add .
+ git commit -m "Initial commit: add project files and data"
+ git branch -M main
+ git remote add origin https://github.com/<your-username>/<repo-name>.git
+ git push -u origin main
 ```
 
 Replace `<your-username>` and `<repo-name>` with your GitHub username and chosen repository name. If you use the GitHub CLI you can create and push with:
@@ -70,9 +67,6 @@ Replace `<your-username>` and `<repo-name>` with your GitHub username and chosen
 ```
 gh repo create <your-username>/<repo-name> --public --source=. --remote=origin
 git push -u origin main
-git checkout -b backup
-git commit --allow-empty -m "Checkpoint: backup branch created"
-git push -u origin backup
 ```
 
 Notes and academic requirements
