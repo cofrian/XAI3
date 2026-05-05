@@ -76,4 +76,4 @@ Notes and academic requirements
 
 License
 
-This repository contains student coursework. Check with your instructor for licensing and sharing permissions.
+This repository contains student coursework.
