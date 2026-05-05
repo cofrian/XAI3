@@ -1,0 +1,371 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\documentclass[
+]{article}
+
+\usepackage{xcolor}
+\definecolor{accent}{HTML}{1F4E79}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{iftex}
+
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp}
+\else
+  \usepackage{unicode-math}
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+
+\usepackage{lmodern}
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{%
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath}
+}{}
+
+\makeatletter
+\@ifundefined{KOMAClassName}{%
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{%
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{5pt plus 1pt minus 1pt}}
+}{%
+  \KOMAoptions{parskip=half}}
+\makeatother
+
+\usepackage{longtable,booktabs,array}
+\newcounter{none}
+\usepackage{calc}
+\usepackage{etoolbox}
+
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+
+\usepackage{graphicx}
+\makeatletter
+\newsavebox\pandoc@box
+\newcommand*\pandocbounded[1]{%
+  \sbox\pandoc@box{#1}%
+  \Gscale@div\@tempa{\textheight}{\dimexpr\ht\pandoc@box+\dp\pandoc@box\relax}%
+  \Gscale@div\@tempb{\linewidth}{\wd\pandoc@box}%
+  \ifdim\@tempb\p@<\@tempa\p@\let\@tempa\@tempb\fi%
+  \ifdim\@tempa\p@<\p@\scalebox{\@tempa}{\usebox\pandoc@box}%
+  \else\usebox{\pandoc@box}%
+  \fi%
+}
+\def\fps@figure{htbp}
+\makeatother
+
+\setlength{\emergencystretch}{3em}
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf}
+\setlength{\parskip}{0.55em}
+\setlength{\parindent}{0pt}
+
+\usepackage{bookmark}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{}
+\urlstyle{same}
+
+\hypersetup{
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}
+}
+
+\author{}
+\date{\vspace{-2.5em}}
+
+\newcommand{\figdir}{figures}
+\newcommand{\safeincludegraphics}[2][]{%
+  \IfFileExists{#2}{\includegraphics[#1]{#2}}{\fbox{\parbox[c][3cm][c]{0.85\linewidth}{\centering Missing figure:\\ \texttt{\detokenize{#2}}}}}%
+}
+
+\begin{document}
+
+% --- DOCUMENT DATA ---
+\newcommand{\subjectname}{EDM -- Evaluation, Deployment and Monitoring of Models}
+\newcommand{\deliverable}{Task: XAI3}
+\newcommand{\projecttitle}{Model-Agnostic Explainability with Partial Dependence Plots}
+\newcommand{\projectsubtitle}{Professional audit of Random Forest models for bike-rental demand and house-price prediction}
+\newcommand{\authorA}{Luis Trigueros Espada}
+\newcommand{\authorB}{Fernando Mart\'inez G\'omez}
+\newcommand{\authorC}{Sergio Ortiz Montesinos}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=accent,
+    citecolor=accent,
+    urlcolor=accent,
+    pdftitle={XAI3 Model-Agnostic Explainability with PDP},
+    pdfauthor={Luis Trigueros Espada, Fernando Martinez, Sergio Ortiz}
+}
+
+% --- COVER PAGE ---
+\pagenumbering{gobble}
+\begin{titlepage}
+    \setlength{\parskip}{0pt}
+    \centering
+
+    \IfFileExists{logo_upv.png}{%
+      \includegraphics[width=0.62\textwidth, height=4cm, keepaspectratio]{logo_upv.png}
+    }{%
+      \vspace*{1cm}
+      {\Large Universitat Polit\`ecnica de Val\`encia\par}
+    }
+
+    \vspace{0.8cm}
+    {\scshape\LARGE Universitat Polit\`ecnica de Val\`encia \par}
+    \vspace{0.35cm}
+    {\scshape\Large School of Computer Science \par}
+    \vspace{1.1cm}
+
+    {\scshape\Large Course: \subjectname \par}
+    \vspace{1cm}
+
+    {\huge\bfseries \deliverable \par}
+    \vspace{0.5cm}
+    {\Large\bfseries \projecttitle \par}
+    \vspace{0.35cm}
+    {\large\itshape \projectsubtitle \par}
+    \vspace{1.4cm}
+
+    \textbf{\large Prepared by:} \par
+    \vspace{0.3cm}
+    \authorA \par
+    \authorB \par
+    \authorC \par
+
+    \vfill
+    {\large Date: \today \par}
+\end{titlepage}
+
+\pagenumbering{roman}
+\tableofcontents
+\newpage
+
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+\section{Context and Analytical Objective}
+\label{executive-context-and-analytical-objective}
+
+This report presents a interpretability audit of two Random Forest regression systems. The first system predicts daily bike-rental demand through the target variable \texttt{cnt}; the second estimates housing prices through the target variable \texttt{price}. The purpose is not limited to producing predictions. The central objective is to determine whether the models have learned relationships that are technically credible, operationally interpretable and suitable for controlled deployment.
+
+The audit is based on \textit{Partial Dependence Plots} (PDPs), a global and model-agnostic explanation method. PDPs are appropriate here because Random Forests are flexible and accurate, but their decision logic is not directly readable from a small set of coefficients. The analysis therefore separates two layers: first, predictive quality is checked using out-of-bag validation metrics; second, the fitted model is interpreted through one-dimensional and two-dimensional PDPs.
+
+The analytical scope covers three deliverables: one-dimensional PDPs for bike-rental demand, a two-dimensional temperature-humidity PDP represented as a heatmap, and one-dimensional PDPs for house-price prediction. The workflow also includes controlled sampling, feature engineering, model-quality assessment, interpretation of the plots, limitations and deployment-oriented reproducibility.
+
+\section{PDP: Mathematical Definition and Interpretation Logic}
+\label{pdp-mathematical-definition-and-interpretation-logic}
+
+Let $\hat{f}$ be a trained prediction model and let the feature vector $x$ be split into two parts: $x_S$, the feature or features to be explained, and $x_C$, the remaining complementary features. The partial dependence function for the selected feature subset $S$ is estimated as:
+
+\[
+\hat{f}_{S}(x_S)=\frac{1}{n}\sum_{i=1}^{n}\hat{f}(x_S,x^{(i)}_{C}).
+\]
+
+For a one-dimensional PDP, $S$ contains a single variable. For example, when analysing temperature, the method fixes temperature at a grid of values, combines each fixed value with the observed values of all other variables, obtains predictions for every observation and averages those predictions. The resulting curve shows how the model prediction changes on average as temperature changes.
+
+For a two-dimensional PDP, $S$ contains two variables. In this report, temperature and humidity are varied jointly, producing a grid where each cell contains the average prediction associated with one temperature-humidity combination. This is why the two-dimensional PDP is represented as a heatmap: the axes show the two input variables and the colour represents $\hat{y}$, the model's average prediction.
+
+This method must be interpreted carefully. PDPs explain the behaviour of the fitted model, not the causal structure of the real world. If the curve increases with temperature, the correct interpretation is that the model predicts higher demand when temperature is increased in the PDP simulation. It is not, by itself, proof that temperature causally increases demand. The theoretical limitation is especially important when variables are correlated: the PDP may average predictions over combinations that are rare or unrealistic in the observed data. For this reason, rug marks are included in the plots to show where real observations exist.
+
+In this audit, PDPs are treated as decision-support diagnostics rather than decorative plots. A PDP is useful only if it is read together with the model-quality results and the empirical support of the feature range. Three questions guide the interpretation. First, is the curve directionally plausible from a domain perspective? Second, is the effect stable across the relevant part of the feature range or concentrated only in extreme values? Third, do the rug marks show enough observed data in the region where the effect is being interpreted? This is why the report combines mathematical definition, visual inspection and quality indicators instead of relying on the plots alone.
+
+The same principle applies to the two-dimensional PDP. The heatmap does not simply show where many observations exist; it shows the average prediction that the model would produce if temperature and humidity were forced to each grid combination. The rug marks then add the data-density context that the PDP itself does not provide. As a result, the heatmap can be used to identify operationally favourable weather regimes while still acknowledging which parts of the surface have weaker empirical support.
+
+\section{Data Preparation, Sampling and Model Quality}
+\label{data-preparation-sampling-and-model-quality}
+
+The bike-sharing data are transformed to produce interpretable predictors. The variable \texttt{season} is represented through dummy variables, avoiding the false assumption that seasons operate as a continuous numeric scale. Weather situation is converted into two binary indicators: \texttt{misty} for misty or cloudy conditions and \texttt{RAIN} for adverse rain, snow or storm conditions. Meteorological variables are denormalised using the established transformation: \texttt{temp * (39 + 8) - 8}, \texttt{hum * 100} and \texttt{windspeed * 67}. Finally, \texttt{days\_since\_2011} measures the number of days elapsed since 1 January 2011.
+
+The sampling design is deliberately different across analysis blocks. The one-dimensional bike PDPs use the transformed bike dataset, while the two-dimensional bike PDP uses a random sample of 50 observations to reproduce the compact heatmap methodology and control computational cost. For the house-price model, a random sample of 2000 observations is used both to train the Random Forest and to compute PDPs. The same sample is used for training and interpretation so that the explanation corresponds exactly to the fitted model.
+
+Before interpreting any PDP, model quality is checked. This is consistent with a deployment-oriented ModelOps view: a model should not be explained operationally before verifying that its predictive behaviour is acceptable. Random Forests provide out-of-bag (OOB) predictions because each tree is trained on a bootstrap sample and the observations left outside that tree can be used as internal validation data.
+
+\begin{table}[H]
+\centering
+\caption{Out-of-bag model quality indicators}
+\begin{tabular}{lrrr}
+\toprule
+Model & RMSE & MAE & $R^2$ \\
+\midrule
+Bike-rental Random Forest & 640.4 rentals & 447.7 rentals & 0.891 \\
+House-price Random Forest & \$254,287 & \$153,955 & 0.564 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The quality indicators are interpreted together rather than independently. RMSE penalizes large errors more strongly, MAE reports the average absolute error in the original business units, and $R^2$ summarizes the share of target variability captured by the model. Formally, for observed values $y_i$ and predictions $\hat{y}_i$:
+
+\[
+RMSE=\sqrt{\frac{1}{n}\sum_{i=1}^{n}(y_i-\hat{y}_i)^2}, \qquad
+MAE=\frac{1}{n}\sum_{i=1}^{n}|y_i-\hat{y}_i|.
+\]
+
+The bike-rental model has strong predictive quality: an $R^2$ of 0.891 means that the model explains approximately 89.1\% of the variability in daily rentals, and the mean absolute error is around 448 rentals. This is a sufficiently strong basis for interpreting the learned relationships. The house-price model is more moderate, with $R^2=0.564$ and a mean absolute error close to \$154,000. This is expected because the model deliberately uses only a reduced set of structural features and excludes highly influential housing variables such as location, grade, view, waterfront status and condition. Therefore, the house model is useful for explaining broad structural effects, but should not be interpreted as a complete valuation engine.
+
+This distinction is central to the audit. The bike model can support a stronger operational reading because its predictive error is relatively controlled. The housing model, by contrast, should be treated as a constrained explanatory prototype: it can reveal which structural attributes the Random Forest uses, but its predictions would require additional features and monitoring before any high-stakes valuation use.
+
+\section{Bike-Rental Demand: One-Dimensional PDP Audit}
+\label{bike-rental-demand-one-dimensional-pdp-audit}
+
+A Random Forest regression model is fitted to predict \texttt{cnt}. The one-dimensional PDPs analyse four drivers: time since 2011, temperature, humidity and wind speed. These variables are operationally meaningful because they capture system maturity and weather comfort.
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.48\linewidth}
+\centering
+\safeincludegraphics[width=\linewidth]{\figdir/bike_pdp_days_since_2011.png}
+\end{minipage}
+\begin{minipage}{0.48\linewidth}
+\centering
+\safeincludegraphics[width=\linewidth]{\figdir/bike_pdp_temperature.png}
+\end{minipage}
+
+\vspace{0.18cm}
+
+\begin{minipage}{0.48\linewidth}
+\centering
+\safeincludegraphics[width=\linewidth]{\figdir/bike_pdp_humidity.png}
+\end{minipage}
+\begin{minipage}{0.48\linewidth}
+\centering
+\safeincludegraphics[width=\linewidth]{\figdir/bike_pdp_windspeed.png}
+\end{minipage}
+\caption{One-dimensional PDPs for bike-rental demand}
+\end{figure}
+
+The PDP for \texttt{days\_since\_2011} shows a strong upward trend. The model predicts around 3000 rentals at the beginning of the period and more than 5000 rentals in later phases. This indicates that the Random Forest has learned a structural temporal effect, probably capturing system adoption, service maturity and year-to-year growth. The curve is not perfectly smooth because Random Forests learn threshold-based relationships, which naturally appear as plateaus and jumps in PDPs. The rug marks under the curve look almost continuous because daily data exist across most of the time range; this is not a plotting error, but a sign of broad temporal support.
+
+The temperature PDP shows a clear comfort pattern. Predicted demand is low at cold temperatures, rises strongly as temperature becomes moderate and warm, and then stabilizes or slightly declines in the hottest range. This is operationally plausible: cycling is more attractive in comfortable weather, but excessive heat may reduce demand.
+
+Humidity has the opposite effect. Predicted rentals remain relatively high at low and medium humidity levels, but decline sharply when humidity becomes high. This suggests that the model treats high humidity as a negative comfort indicator, possibly associated with poorer perceived weather or conditions close to rain. Wind speed also has a negative high-end effect: low and moderate wind have limited impact, but strong wind produces a clear drop in predicted rentals. Overall, the model learns a coherent demand logic: time and comfortable temperature increase demand, while high humidity and strong wind penalize it.
+
+From an operational perspective, the four curves also separate strategic and tactical drivers. The temporal PDP is strategic: it reflects long-run changes in the system and should be monitored when the service evolves or user adoption changes. The weather PDPs are tactical: they explain short-term demand sensitivity and can support planning of fleet availability, maintenance windows or staffing. This distinction matters because the same model output can inform different types of decisions. A temporal increase suggests structural growth, whereas humidity or wind effects indicate day-to-day demand pressure.
+
+The plots also show why a nonlinear model is appropriate. A simple linear model would impose a constant marginal effect for temperature, humidity or wind speed. The PDPs reveal instead that the effects are threshold-based: temperature has a comfort zone, humidity becomes especially negative at high levels, and wind speed becomes relevant mainly in the upper range. The Random Forest is therefore not only producing predictions; it is capturing nonlinear demand regimes that are meaningful for planning.
+
+\section{Bidimensional PDP: Temperature and Humidity}
+\label{bidimensional-pdp-temperature-and-humidity}
+
+The bidimensional PDP examines the joint effect of temperature and humidity. A random sample of 50 observations is used for this plot, and the result is represented with \texttt{geom\_tile()} as a heatmap. The horizontal axis represents temperature, the vertical axis represents humidity and the colour scale represents the average predicted number of rentals. Rug marks on both axes show the empirical distribution of the sampled observations.
+
+\begin{figure}[H]
+\centering
+\safeincludegraphics[width=0.78\linewidth]{\figdir/bike_pdp_2d_temperature_humidity_heatmap.png}
+\caption{Two-dimensional PDP for temperature and humidity}
+\end{figure}
+
+The heatmap confirms the one-dimensional findings and adds an interaction perspective. The highest predicted demand appears in areas with medium-high temperature and non-extreme humidity. These conditions represent favourable cycling weather. Low temperatures are associated with lower predicted demand even when humidity is not extreme, which indicates that temperature is a dominant driver. Humidity then modifies that baseline: when humidity increases, predictions are lower than in drier or moderate-humidity zones.
+
+The key operational conclusion is that the model does not treat demand as a function of temperature alone. It identifies the strongest demand scenario as the combination of comfortable temperature and acceptable humidity. The rug marks are essential for interpretation: they show where the 50 sampled observations are located, helping distinguish supported regions from combinations that may be less common. Because temperature and humidity can be correlated, this plot should be read as a model-behaviour explanation rather than a causal weather law.
+
+\section{House-Price Prediction: PDP Audit}
+\label{house-price-prediction-pdp-audit}
+
+The house-price Random Forest predicts \texttt{price} using \texttt{bedrooms}, \texttt{bathrooms}, \texttt{sqft\_living}, \texttt{sqft\_lot}, \texttt{floors} and \texttt{yr\_built}. The PDP audit focuses on \texttt{bedrooms}, \texttt{bathrooms}, \texttt{sqft\_living} and \texttt{floors}. Since the model quality is moderate, the interpretation should be understood as a structural explanation of the fitted model, not as a complete appraisal system.
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.48\linewidth}
+\centering
+\safeincludegraphics[width=\linewidth]{\figdir/house_pdp_bedrooms.png}
+\end{minipage}
+\begin{minipage}{0.48\linewidth}
+\centering
+\safeincludegraphics[width=\linewidth]{\figdir/house_pdp_bathrooms.png}
+\end{minipage}
+
+\vspace{0.18cm}
+
+\begin{minipage}{0.48\linewidth}
+\centering
+\safeincludegraphics[width=\linewidth]{\figdir/house_pdp_sqft_living.png}
+\end{minipage}
+\begin{minipage}{0.48\linewidth}
+\centering
+\safeincludegraphics[width=\linewidth]{\figdir/house_pdp_floors.png}
+\end{minipage}
+\caption{One-dimensional PDPs for house-price prediction}
+\end{figure}
+
+The clearest relationship is \texttt{sqft\_living}. Predicted price increases strongly as living area grows, which is the most robust and interpretable housing insight in the report. This confirms that the model learns a core real-estate mechanism: larger internal usable area is associated with higher price.
+
+The \texttt{bathrooms} PDP also shows a positive relationship. More bathrooms tend to increase the predicted price, reflecting the fact that bathrooms are usually associated with larger, better-equipped or higher-quality houses. The curve contains jumps because Random Forests operate through decision thresholds.
+
+The \texttt{bedrooms} PDP is more irregular. More bedrooms do not automatically imply higher price because room count can be confounded with total area, layout and housing type. A smaller high-quality property can be more expensive than a larger property with more but smaller rooms. Finally, \texttt{floors} has a weaker and less stable effect. It behaves as a secondary structural indicator rather than a dominant value driver. The overall hierarchy is therefore clear: \texttt{sqft\_living} is the strongest explanatory feature, \texttt{bathrooms} is a meaningful positive driver, and \texttt{bedrooms} plus \texttt{floors} require more cautious interpretation.
+
+The house-price results also illustrate the difference between predictive association and business completeness. The model correctly learns that living area and bathrooms are strong structural indicators, but the moderate quality metrics show that important sources of price variability remain outside the selected features. This is expected in real-estate modelling: location, neighbourhood, views, renovation status and quality grade often dominate valuation. Consequently, the PDPs are useful for understanding the Random Forest's internal behaviour under the selected feature set, but they should not be presented as a complete pricing policy.
+
+\section{Traceability of Transformations and Analytical Controls}
+\label{traceability-transformations-and-analytical-controls}
+
+A key requirement for this type of interpretability work is that every plot must be traceable back to a precise modelling decision. For the bike-rental model, the transformation of meteorological variables is not only a preprocessing step; it directly determines how the PDPs are read. Temperature is interpreted in degrees Celsius, humidity in percentage points and wind speed in its rescaled unit. Without this denormalisation, the PDP curves would still be mathematically valid, but their business interpretation would be weaker because stakeholders would read effects on abstract normalized variables rather than operational units.
+
+The sampling decisions are also part of the analytical control layer. The sample of 50 observations is intentionally restricted to the two-dimensional heatmap, where the objective is to reproduce a compact PDP surface and visualize the joint density of two inputs. The house-price sample of 2000 observations has a different purpose: it reduces computational cost while preserving enough variability for model training and PDP estimation. Keeping these sampling rules explicit prevents a common audit error: mixing up the sample used for visualization with the sample used for model fitting.
+
+The use of fixed seeds ensures that the reported figures and quality metrics can be reproduced. In an operational workflow, this would be complemented with a clear repository structure, saved figures, an exported PDF report and a commit history. The resulting artefacts allow another reviewer to rerun the analysis, inspect the code and verify that the conclusions follow from the same data processing and model configuration.
+
+\section{Operational Interpretation and Decision-Readiness}
+\label{operational-interpretation-and-decision-readiness}
+
+The practical value of the PDP analysis is that it translates a complex Random Forest into a set of interpretable behavioural patterns. These patterns do not replace prediction metrics, but they help determine whether the model is decision-ready. A model with acceptable error but incoherent explanations would not be appropriate for controlled use; conversely, a model with plausible explanations but weak quality would remain only exploratory. This audit therefore evaluates both dimensions together: predictive quality and interpretability.
+
+\begin{table}[H]
+\centering
+\caption{Decision-oriented synthesis of the PDP findings}
+\begin{tabular}{p{0.22\linewidth}p{0.39\linewidth}p{0.31\linewidth}}
+\toprule
+Area & Model insight & Practical implication \\
+\midrule
+Bike demand & Demand increases strongly over time. & The system appears to capture long-run adoption or service maturity, so historical period must be controlled when comparing demand. \\
+Bike demand & Comfortable temperatures increase predicted rentals. & Capacity planning should expect higher demand during mild and warm days. \\
+Bike demand & High humidity and strong wind reduce predicted rentals. & Adverse comfort conditions should lower operational demand expectations. \\
+Bike demand & Best predictions appear under medium-high temperature and moderate humidity. & The 2D PDP identifies the most favourable weather regime for bike usage. \\
+House prices & \texttt{sqft\_living} is the clearest positive driver. & Interior living area is the most reliable structural explanation in the selected feature set. \\
+House prices & \texttt{bathrooms} has a positive effect. & Bathroom count acts as a proxy for size, quality and housing segment. \\
+House prices & \texttt{bedrooms} and \texttt{floors} are less stable. & These variables should not be interpreted in isolation without considering surface and house type. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The bike-rental model is the more decision-ready of the two systems. Its OOB quality is strong and the PDPs are consistent with domain expectations: demand grows with favourable weather and decreases under uncomfortable conditions. This combination of predictive performance and coherent explanations makes the model suitable as an analytical support tool for demand planning, scenario analysis and operational monitoring.
+
+The house-price model is more limited. Its PDPs are directionally reasonable, especially for \texttt{sqft\_living} and \texttt{bathrooms}, but the moderate $R^2$ indicates that the selected variables do not capture the full complexity of house valuation. The model is therefore useful for explaining broad structural relationships, but not sufficient as a standalone valuation system. A production-grade housing model would require additional variables such as location, condition, grade, view, waterfront status and neighbourhood-level information.
+
+A final decision-readiness criterion is the reliability of the PDP range. The rug marks are not decorative: they indicate where real observations support the interpretation. Regions with many rug marks provide stronger empirical grounding, while sparse regions should be treated as extrapolative or unstable. This is especially relevant at the extremes of wind speed, humidity, number of bedrooms and very large living areas. In those regions, the curve may reflect model extrapolation more than robust historical evidence.
+
+Overall, the audit supports a controlled use of the bike-rental model as an interpretable forecasting component, while positioning the house-price model as an explanatory prototype. This distinction is important: both models can be explained, but only the first one currently combines strong predictive quality with stable and operationally credible PDP behaviour.
+
+\section{Deployment Perspective, Risks and Conclusions}
+\label{deployment-perspective-risks-and-conclusions}
+
+From a deployment perspective, this work should be understood as a validation and interpretability layer before operational use. The repository-based workflow supports reproducibility through structured code, figures, report files and version control. In a production setting, the same logic would be extended with data versioning, automated quality checks, model-quality monitoring, deployment packaging and retraining triggers.
+
+A realistic deployment workflow would separate training from inference. During training, the system would load validated data, apply the same feature transformations, train the Random Forest, calculate quality metrics, generate PDP diagnostics and store the resulting artefacts. During inference, the system would receive new observations, apply the identical preprocessing pipeline and return predictions. The PDP analysis would not be recomputed for every prediction; it would serve as an audit artefact to validate that the model behaviour remains reasonable over time.
+
+The main model risk is interpretability misuse. PDPs are global averages: they can hide heterogeneous local behaviour, and they may evaluate unrealistic feature combinations when variables are correlated. The heatmap therefore includes density information through rug marks, and all conclusions are framed as statements about the fitted model rather than direct causal statements about reality.
+
+The bike-rental model is strong enough to support operational interpretation. It learns that demand increases over time, rises with comfortable temperature and decreases under high humidity and strong wind. The two-dimensional PDP refines this conclusion: the best predicted demand occurs under medium-high temperature and acceptable humidity.
+
+The house-price model provides useful but incomplete structural insight. It clearly identifies living area as the main driver and bathrooms as a secondary positive factor, while bedrooms and floors behave less directly. Given the moderate $R^2$, this model should be used for explanatory analysis rather than precise valuation.
+
+The final conclusion is that PDPs transform complex Random Forest models into auditable predictive systems. They do not replace model-quality metrics, but they complement them by explaining what the model has learned. This combination of quality testing, PDP interpretation, sampling discipline and deployment-oriented documentation provides a defensible framework for using black-box models in a controlled analytical environment.
+
+\end{document}

@@ -1,0 +1,739 @@
+---
+title: "XAI3 - Model-Agnostic Explainability with Partial Dependence Plots"
+author: "Fernando Martínez Gómez, Luis Trigueros Espada, Sergio Ortiz Montesinos"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+  word_document:
+    toc: true
+  html_notebook:
+    toc: true
+    toc_float: true
+    number_sections: true
+subtitle: Professional R Markdown notebook for Exercise 5
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 9,
+  fig.height = 5.5,
+  fig.align = "center"
+)
+```
+
+# Purpose of the analysis
+
+This notebook develops an end-to-end **model-agnostic explainability analysis** using **Partial Dependence Plots (PDPs)**. The objective is not to optimize the predictive model as much as possible, but to train sufficiently expressive black-box models and then audit what relationships they have learned between input variables and model predictions.
+
+The practical work is organized as a single reproducible analysis pipeline:
+
+1.  Prepare the data using the same transformations used in the previous practical work.
+2.  Train Random Forest regression models.
+3.  Explain the fitted models with one-dimensional and two-dimensional PDPs.
+4.  Replicate the visual style shown in class for the two-dimensional heatmap.
+5.  Discuss the results from an interpretability and deployment perspective.
+
+The methodology follows the theory of **post-hoc, model-agnostic, global interpretability**. A PDP is post-hoc because it is applied after the model has been trained. It is model-agnostic because it only needs access to the model predictions. It is global because it summarizes the average effect of one or two variables over the full data distribution used to compute the PDP.
+
+# Reproducibility and project setup
+
+A professional Machine Learning project should be reproducible. In this practice, reproducibility is addressed by fixing the random seed, keeping the data transformation explicit, saving all figures, and organizing the notebook as a GitHub-ready project.
+
+The expected repository structure is:
+
+``` text
+xai3-pdp-project/
+├── data/
+│   ├── day.csv
+│   └── kc_house_data.csv
+├── figures/
+├── report/
+└── XAI3_PDP_professional_notebook.Rmd
+```
+
+In the context of the deployment and ModelOps theory, this notebook acts as the analytical pipeline: raw data are loaded, transformed, used to train models, and then interpreted through PDP visualizations. Git and GitHub should be used to version this work and provide the final delivery link.
+
+```{r packages}
+required_packages <- c(
+  "randomForest",
+  "pdp",
+  "ggplot2",
+  "dplyr",
+  "readr",
+  "knitr",
+  "scales"
+)
+
+missing_packages <- required_packages[!sapply(required_packages, requireNamespace, quietly = TRUE)]
+
+if (length(missing_packages) > 0) {
+  stop(
+    paste(
+      "Please install the following packages before knitting the notebook:",
+      paste(missing_packages, collapse = ", ")
+    )
+  )
+}
+
+library(randomForest)
+library(pdp)
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(knitr)
+library(scales)
+
+set.seed(123)
+
+if (!dir.exists("figures")) dir.create("figures")
+
+regression_metrics <- function(actual, predicted) {
+  data.frame(
+    RMSE = sqrt(mean((actual - predicted)^2)),
+    MAE = mean(abs(actual - predicted)),
+    R2 = 1 - sum((actual - predicted)^2) / sum((actual - mean(actual))^2),
+    row.names = NULL
+  )
+}
+```
+
+# Theoretical background: Partial Dependence Plot
+
+A **Partial Dependence Plot** shows the marginal effect of one or two input variables on the prediction of a trained model.
+
+For one variable, the question is:
+
+> If we force this variable to take different values, while keeping the rest of the data distribution as observed, how does the average prediction of the model change?
+
+For two variables, the question becomes:
+
+> How does the average prediction change for different combinations of two variables?
+
+This is useful for Random Forests because Random Forests can capture nonlinear effects and interactions, but their internal decision process is not directly interpretable. PDPs give a visual summary of the relationships learned by the model.
+
+However, PDP interpretation must be done carefully. PDPs average over the remaining variables, so if the features are highly correlated, the PDP may evaluate unrealistic combinations. For this reason, the two-dimensional PDP will include rug marks showing the empirical distribution of the two variables, as shown in the class slides.
+
+Model quality is also reported because interpretability should not be disconnected from predictive reliability. Following the ModelOps view of the data science pipeline, a model should be trained, tested and validated before being interpreted or considered for deployment. In this notebook, Random Forest quality is evaluated using out-of-bag predictions, which are naturally produced by the bootstrap mechanism of Random Forests. The reported metrics are RMSE, MAE and R-squared.
+
+# Bike rental demand: data preparation
+
+The first model predicts the number of rented bikes, `cnt`, from weather and calendar information. The transformations below are intentionally kept exactly as in the previous practical work so that the feature engineering is consistent with the class workflow.
+
+The original `season` variable is categorical but encoded as integers. Instead of treating it as a continuous number, we transform it into dummy variables. This avoids imposing an artificial numerical ordering on the seasons.
+
+```{r bike-data-loading}
+bike_raw <- read.csv("data/day.csv")
+
+season_factor <- factor(bike_raw$season)
+season_matrix <- model.matrix(~ season_factor)[, -1, drop = FALSE]
+colnames(season_matrix) <- c("season_2", "season_3", "season_4")
+
+bike <- cbind(
+  bike_raw[, names(bike_raw) != "season"],
+  as.data.frame(season_matrix)
+)
+```
+
+The next block performs the exact feature engineering and scaling used previously. The goal is to make the variables more interpretable before modeling:
+
+-   `misty` identifies days with misty weather.
+-   `RAIN` identifies days with rain, snow or storm conditions.
+-   `temp` is converted from its normalized scale to degrees Celsius using the same formula used in the previous work.
+-   `hum` is converted to percentage.
+-   `windspeed` is rescaled to its original approximate scale.
+-   `days_since_2011` converts the date into a numerical time trend.
+
+```{r bike-transformations}
+bike$misty <- as.integer(bike$weathersit == 2)
+bike$RAIN <- as.integer(bike$weathersit %in% c(3, 4))
+bike$temp <- bike$temp * (39 + 8) - 8
+bike$hum <- bike$hum * 100
+bike$windspeed <- bike$windspeed * 67
+bike$days_since_2011 <- as.integer(as.Date(bike$dteday) - as.Date("2011-01-01"))
+
+bike_clean <- bike[, c(
+  "workingday",
+  "holiday",
+  "season_2",
+  "season_3",
+  "season_4",
+  "misty",
+  "RAIN",
+  "temp",
+  "hum",
+  "windspeed",
+  "days_since_2011",
+  "cnt"
+)]
+
+kable(head(bike_clean), caption = "Prepared bike rental dataset after feature engineering.")
+```
+
+# Bike rental demand: Random Forest model
+
+The exercise asks us to fit a **Random Forest approximation** for predicting bike rental counts. Random Forest is appropriate here because it can learn nonlinear relationships between weather, calendar variables and rental demand. It is also a good candidate for XAI analysis because its internal structure is less transparent than a single tree or a linear model.
+
+```{r bike-random-forest}
+set.seed(123)
+
+bike_rf <- randomForest(
+  cnt ~ .,
+  data = bike_clean,
+  ntree = 500,
+  importance = TRUE
+)
+
+bike_rf
+```
+
+## Bike model quality
+
+Although the main objective of the practical work is explainability, the quality of the fitted model must be checked before interpreting it. For Random Forests, the out-of-bag predictions provide an internal validation estimate: each observation is predicted by the trees for which it was not included in the bootstrap sample. This avoids evaluating the model only on the same data used by each individual tree.
+
+```{r bike-model-quality}
+bike_quality <- regression_metrics(
+  actual = bike_clean$cnt,
+  predicted = bike_rf$predicted
+)
+
+bike_quality$Model <- "Bike rental Random Forest"
+bike_quality <- bike_quality[, c("Model", "RMSE", "MAE", "R2")]
+
+kable(
+  bike_quality,
+  digits = 3,
+  caption = "Out-of-bag quality metrics for the bike rental Random Forest."
+)
+```
+
+The bike model should be interpreted as reliable enough for XAI analysis if the OOB error is reasonably small compared with the scale of daily rentals and if the R-squared indicates that the model captures a substantial part of the variation in `cnt`. PDPs are then used not to prove accuracy, but to explain the structure learned by a model whose predictive quality has been checked.
+
+The following table gives a basic model-level view of variable importance. This is not a PDP, but it helps identify which variables the Random Forest uses most strongly. PDPs are then used to understand the direction and shape of the effect.
+
+```{r bike-importance}
+bike_importance <- data.frame(
+  Feature = rownames(importance(bike_rf)),
+  Importance = importance(bike_rf)[, "%IncMSE"]
+) |>
+  arrange(desc(Importance))
+
+kable(bike_importance, digits = 2, caption = "Random Forest variable importance for bike rental prediction.")
+```
+
+# One-dimensional PDPs for bike rental demand
+
+The first interpretability analysis studies the marginal effect of:
+
+-   `days_since_2011`
+-   `temp`
+-   `hum`
+-   `windspeed`
+
+Each PDP shows how the predicted number of bikes changes on average when the selected variable changes.
+
+```{r helper-pdp-1d}
+plot_pdp_1d <- function(pdp_data, feature, title, x_label, y_label, rug_data = NULL) {
+  p <- ggplot(pdp_data, aes(x = .data[[feature]], y = yhat)) +
+    geom_line(size = 1, color = "#2D4F73") +
+    labs(
+      title = title,
+      x = x_label,
+      y = y_label
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(
+      plot.title = element_text(face = "bold"),
+      panel.grid.minor = element_blank()
+    )
+
+  if (!is.null(rug_data)) {
+    p <- p + geom_rug(
+      data = rug_data,
+      aes(x = .data[[feature]]),
+      inherit.aes = FALSE,
+      sides = "b",
+      alpha = 0.25,
+      color = "#5A4635"
+    )
+  }
+
+  return(p)
+}
+```
+
+## Temporal effect: days since 2011
+
+The `days_since_2011` variable captures long-term temporal changes in bike rental demand. It may reflect growth of the service, changes between years, seasonality that remains after the season variables, or general adoption trends.
+
+```{r bike-pdp-days}
+pdp_bike_days <- partial(
+  object = bike_rf,
+  pred.var = "days_since_2011",
+  train = bike_clean[, names(bike_clean) != "cnt"],
+  grid.resolution = 30,
+  progress = "none"
+)
+
+p_bike_days <- plot_pdp_1d(
+  pdp_bike_days,
+  feature = "days_since_2011",
+  title = "Partial Dependence of Bike Rentals on Days Since 2011",
+  x_label = "Days since 2011-01-01",
+  y_label = "Predicted bike count",
+  rug_data = bike_clean
+)
+
+p_bike_days
+ggsave("figures/bike_pdp_days_since_2011.png", p_bike_days, width = 9, height = 5.5, dpi = 300)
+```
+
+**Interpretation.** The PDP for `days_since_2011` shows a clear upward temporal pattern. At the beginning of the period, the Random Forest predicts around 2,900--3,000 rentals on average. As the number of days since 2011 increases, the prediction rises in several steps until it reaches values above 5,000 rentals. The largest structural jump appears around the middle of the time range, which is consistent with the model distinguishing between the first and second year of the service.
+
+From a data science perspective, this variable is acting as a **time proxy**. It does not mean that the passing of time mechanically causes rentals to increase. Rather, the model is using time to summarize several unobserved or partially observed effects: system adoption, differences between 2011 and 2012, seasonal demand patterns and possible changes in user behavior. The final drop at the end of the curve is also plausible because the end of the period corresponds to colder months, where demand can decrease.
+
+The rug mark at the bottom appears almost like a continuous bar because the bike dataset is daily: there is approximately one observation for each day. Therefore, this is not an error and it does not mean that there are no real data. It means the opposite: the feature has observations distributed along nearly the whole time axis. In this case the rug is less informative than for weather variables, but it confirms that the temporal range is well covered.
+
+## Temperature effect
+
+Temperature is expected to have a strong influence on bike rental demand. Moderate or warm temperatures generally make cycling more attractive, while very cold or excessively hot conditions can reduce demand.
+
+```{r bike-pdp-temp}
+pdp_bike_temp <- partial(
+  object = bike_rf,
+  pred.var = "temp",
+  train = bike_clean[, names(bike_clean) != "cnt"],
+  grid.resolution = 30,
+  progress = "none"
+)
+
+p_bike_temp <- plot_pdp_1d(
+  pdp_bike_temp,
+  feature = "temp",
+  title = "Partial Dependence of Bike Rentals on Temperature",
+  x_label = "Temperature (ºC)",
+  y_label = "Predicted bike count",
+  rug_data = bike_clean
+)
+
+p_bike_temp
+ggsave("figures/bike_pdp_temperature.png", p_bike_temp, width = 9, height = 5.5, dpi = 300)
+```
+
+**Interpretation.** The PDP for `temp` shows a strong nonlinear positive effect. For low temperatures, the predicted number of rentals is close to 3,100--3,300. As temperature increases, the model raises its prediction quickly, especially between approximately 5 ºC and 17 ºC. After that point, the curve reaches a high-demand area around 5,000--5,200 predicted rentals.
+
+The most important reading is that the Random Forest has learned that **comfortable temperatures strongly increase expected bike demand**. This is coherent with the domain: cycling is less attractive in cold weather and becomes much more attractive when the weather is mild or warm. However, the curve does not increase indefinitely. At higher temperatures, the effect becomes flatter and eventually decreases slightly. This suggests a saturation effect: once the temperature is already comfortable, additional heat does not add much more demand and may even reduce it if conditions become too hot.
+
+The rug marks show that many real observations lie in the central temperature range. Therefore, the middle of the curve is more reliable than the extremes. This is exactly why the theory recommends looking not only at the PDP value, but also at the support of the feature distribution.
+
+## Humidity effect
+
+Humidity is included because uncomfortable or rainy-feeling weather can reduce the willingness to cycle.
+
+```{r bike-pdp-humidity}
+pdp_bike_hum <- partial(
+  object = bike_rf,
+  pred.var = "hum",
+  train = bike_clean[, names(bike_clean) != "cnt"],
+  grid.resolution = 30,
+  progress = "none"
+)
+
+p_bike_hum <- plot_pdp_1d(
+  pdp_bike_hum,
+  feature = "hum",
+  title = "Partial Dependence of Bike Rentals on Humidity",
+  x_label = "Humidity (%)",
+  y_label = "Predicted bike count",
+  rug_data = bike_clean
+)
+
+p_bike_hum
+ggsave("figures/bike_pdp_humidity.png", p_bike_hum, width = 9, height = 5.5, dpi = 300)
+```
+
+**Interpretation.** The humidity PDP is mostly flat for low and medium humidity values and then becomes clearly negative at high humidity. Up to approximately 50--60% humidity, the predicted number of rentals remains relatively stable. From higher humidity values onward, the model starts reducing the prediction, and the fall becomes especially strong in the upper humidity range.
+
+This means that the Random Forest does not treat small humidity changes as very important, but it does penalize **very humid conditions**. In practical terms, high humidity can be associated with uncomfortable weather, rain probability, or worse perceived conditions for cycling. The effect is therefore coherent with the behavior expected in a bike rental system.
+
+The interpretation must still be cautious. Humidity can be correlated with weather situation, temperature and rain-related variables. According to the PDP theory, when features are correlated, the averaging process can include combinations that are uncommon in the original data. For that reason, the rug marks are useful: they show where humidity values are actually observed and which parts of the curve are supported by more data.
+
+## Wind speed effect
+
+Wind speed is relevant because strong wind makes cycling less comfortable and can reduce safety.
+
+```{r bike-pdp-wind}
+pdp_bike_wind <- partial(
+  object = bike_rf,
+  pred.var = "windspeed",
+  train = bike_clean[, names(bike_clean) != "cnt"],
+  grid.resolution = 30,
+  progress = "none"
+)
+
+p_bike_wind <- plot_pdp_1d(
+  pdp_bike_wind,
+  feature = "windspeed",
+  title = "Partial Dependence of Bike Rentals on Wind Speed",
+  x_label = "Wind speed",
+  y_label = "Predicted bike count",
+  rug_data = bike_clean
+)
+
+p_bike_wind
+ggsave("figures/bike_pdp_windspeed.png", p_bike_wind, width = 9, height = 5.5, dpi = 300)
+```
+
+**Interpretation.** The PDP for `windspeed` shows a negative effect. For low wind speeds, the prediction is relatively high and stable, around the upper part of the bike rental range. As wind speed increases, the predicted demand gradually decreases. The strongest drop appears after approximately 20--25 units of the rescaled wind-speed variable, where the model moves toward substantially lower predicted bike counts.
+
+This is a sensible relationship: strong wind makes cycling less comfortable and can also make it feel less safe. Compared with temperature, the effect is more monotonic and mostly negative. The model therefore seems to use wind speed as a risk or discomfort signal rather than as a demand-enhancing factor.
+
+The rug distribution also matters here. Very high wind-speed values are less frequent, so the far-right part of the curve should be interpreted with more caution. The central part, where the rug marks are denser, is the most empirically supported region.
+
+# Two-dimensional PDP: temperature and humidity
+
+The second part of the analysis studies the joint effect of **temperature** and **humidity**. This is where the plot must replicate the style shown in class: a heatmap made with `geom_tile()`, using a brown/grey to violet/blue color scale, with rug marks on the axes to show the empirical distribution of the two variables.
+
+The professor indicated that when creating this PDP we should select a **random sample of 50 observations**. This is done before generating the PDP data. The model remains the Random Forest trained above, but the PDP calculation averages predictions over this smaller sample.
+
+```{r bike-pdp-2d-sample}
+set.seed(123)
+bike_sample_50 <- bike_clean[sample(nrow(bike_clean), 50), ]
+
+kable(
+  summary(bike_sample_50[, c("temp", "hum", "cnt")]),
+  caption = "Summary of the random sample of 50 observations used for the 2D PDP."
+)
+```
+
+The 2D PDP creates a grid of temperature and humidity combinations. For each grid cell, the model predicts bike rental demand after forcing the observations to take that specific combination of values. The plotted value is the average prediction, denoted as $\hat{y}$.
+
+```{r bike-pdp-2d-computation}
+pdp_bike_temp_hum <- partial(
+  object = bike_rf,
+  pred.var = c("temp", "hum"),
+  train = bike_sample_50[, names(bike_sample_50) != "cnt"],
+  grid.resolution = 12,
+  progress = "none"
+)
+
+kable(head(pdp_bike_temp_hum), caption = "First rows of the 2D PDP grid for temperature and humidity.")
+```
+
+The following plot is the required **heatmap**. The color palette is intentionally defined to match the class example: dark brown/grey for lower predictions, violet/blue for intermediate predictions, and lighter blue for higher predictions.
+
+```{r bike-pdp-2d-plot, fig.width=9, fig.height=6.5}
+tile_width <- diff(range(pdp_bike_temp_hum$temp)) / (length(unique(pdp_bike_temp_hum$temp)) - 1)
+tile_height <- diff(range(pdp_bike_temp_hum$hum)) / (length(unique(pdp_bike_temp_hum$hum)) - 1)
+
+p_bike_2d <- ggplot(pdp_bike_temp_hum, aes(x = temp, y = hum, fill = yhat)) +
+  geom_tile(width = tile_width * 1.05, height = tile_height * 1.05) +
+  geom_rug(
+    data = bike_sample_50,
+    aes(x = temp, y = hum),
+    inherit.aes = FALSE,
+    sides = "bl",
+    alpha = 0.65,
+    color = "#5A4635",
+    size = 0.55
+  ) +
+  scale_fill_gradientn(
+    colours = c(
+      "#4A3C34",
+      "#5C536B",
+      "#5267B4",
+      "#78A6FF"
+    ),
+    name = expression(hat(y))
+  ) +
+  labs(
+    title = "2D Partial Dependence Plot: Temperature and Humidity",
+    subtitle = "Random sample of 50 observations; heatmap style following the class slides",
+    x = "Temperature (ºC)",
+    y = "Humidity (%)"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    panel.grid = element_blank(),
+    legend.title = element_text(face = "bold"),
+    axis.title = element_text(face = "bold")
+  )
+
+p_bike_2d
+ggsave("figures/bike_pdp_2d_temperature_humidity_heatmap.png", p_bike_2d, width = 9, height = 6.5, dpi = 300)
+```
+
+**Interpretation.** The 2D PDP confirms the combined meteorological pattern learned by the Random Forest. The darker brown/grey cells correspond to lower predicted rental demand, while the violet and blue cells correspond to higher predicted demand. The horizontal axis represents temperature and the vertical axis represents humidity; therefore, each cell answers the question: *what would the average predicted bike count be if observations had this combination of temperature and humidity?*
+
+The main pattern is that predictions are lowest when temperature is low, especially in the left part of the heatmap. As temperature increases, the color becomes progressively bluer, meaning that the model predicts more rentals under warmer conditions. This agrees with the one-dimensional temperature PDP. Humidity modifies that effect: for similar temperatures, very high humidity tends to produce darker colors than moderate humidity. In other words, the model favors **warm but not excessively humid** conditions.
+
+This graph is important because it reveals an interaction that a one-dimensional plot cannot fully show. Temperature has a positive effect, but that effect is not isolated from humidity. A warm day with moderate humidity is predicted as more favorable than a cold day or a very humid day.
+
+The rug marks on the bottom and left axes are part of the class-style plot and are essential for interpretation. They show the empirical distribution of the 50 sampled observations used to calculate the 2D PDP. Regions with many rug marks correspond to combinations supported by observed data. Regions with few marks should be interpreted more carefully, because PDPs can evaluate combinations that are possible in the grid but rare in the original sample. This directly addresses the limitation discussed in the theory: PDP averaging is most reliable when the evaluated feature combinations are realistic and sufficiently represented in the data.
+
+# House price prediction: data preparation and sampling
+
+The third part applies the same model-agnostic interpretability logic to a different regression problem: house price prediction.
+
+The model uses the following predictors:
+
+-   `bedrooms`
+-   `bathrooms`
+-   `sqft_living`
+-   `sqft_lot`
+-   `floors`
+-   `yr_built`
+
+The target variable is `price`.
+
+The database is larger than the bike dataset. Following the instruction discussed in class, a random sample between 1000 and 2000 observations is used for training and PDP computation. Here we use **2000 observations**.
+
+```{r house-data}
+house_raw <- read.csv("data/kc_house_data.csv")
+
+house_features <- c(
+  "bedrooms",
+  "bathrooms",
+  "sqft_living",
+  "sqft_lot",
+  "floors",
+  "yr_built"
+)
+
+house_model_data <- house_raw[, c(house_features, "price")]
+house_model_data <- na.omit(house_model_data)
+
+set.seed(123)
+house_sample <- house_model_data[sample(nrow(house_model_data), 2000), ]
+
+kable(head(house_sample), caption = "Random sample of 2000 observations used for house price modeling.")
+```
+
+# House price prediction: Random Forest model
+
+A Random Forest is again used because the relationship between housing characteristics and price is unlikely to be purely linear. For example, the effect of living area can be nonlinear and can interact with other characteristics such as number of bathrooms or year built.
+
+```{r house-random-forest}
+set.seed(123)
+
+house_rf <- randomForest(
+  price ~ bedrooms + bathrooms + sqft_living + sqft_lot + floors + yr_built,
+  data = house_sample,
+  ntree = 500,
+  importance = TRUE
+)
+
+house_rf
+```
+
+## House price model quality
+
+The house model is also evaluated using out-of-bag predictions. This is especially important because the model intentionally uses only six structural variables. Therefore, a moderate quality result would not mean that the PDPs are useless; rather, it would mean that the PDPs explain the behaviour of a simplified model, not a complete real-estate valuation system.
+
+```{r house-model-quality}
+house_quality <- regression_metrics(
+  actual = house_sample$price,
+  predicted = house_rf$predicted
+)
+
+house_quality$Model <- "House price Random Forest"
+house_quality <- house_quality[, c("Model", "RMSE", "MAE", "R2")]
+
+kable(
+  house_quality,
+  digits = 3,
+  caption = "Out-of-bag quality metrics for the house price Random Forest."
+)
+```
+
+The expected quality is lower than in the bike model because house prices are strongly affected by variables that are not included in this simplified feature set, such as location, view, condition, grade or renovation status. The PDPs should therefore be interpreted as explanations of the selected-variable model.
+
+```{r house-importance}
+house_importance <- data.frame(
+  Feature = rownames(importance(house_rf)),
+  Importance = importance(house_rf)[, "%IncMSE"]
+) |>
+  arrange(desc(Importance))
+
+kable(house_importance, digits = 2, caption = "Random Forest variable importance for house price prediction.")
+```
+
+# One-dimensional PDPs for house price prediction
+
+The PDPs below analyze the influence of:
+
+-   `bedrooms`
+-   `bathrooms`
+-   `sqft_living`
+-   `floors`
+
+Each graph shows the average model prediction for different values of the selected feature.
+
+```{r helper-house-pdp}
+plot_house_pdp_1d <- function(pdp_data, feature, title, x_label) {
+  ggplot(pdp_data, aes(x = .data[[feature]], y = yhat)) +
+    geom_line(size = 1, color = "#2D4F73") +
+    geom_rug(
+      data = house_sample,
+      aes(x = .data[[feature]]),
+      inherit.aes = FALSE,
+      sides = "b",
+      alpha = 0.2,
+      color = "#5A4635"
+    ) +
+    scale_y_continuous(labels = dollar_format(prefix = "$")) +
+    labs(
+      title = title,
+      x = x_label,
+      y = "Predicted house price"
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(
+      plot.title = element_text(face = "bold"),
+      panel.grid.minor = element_blank()
+    )
+}
+```
+
+## Bedrooms
+
+```{r house-pdp-bedrooms}
+pdp_house_bedrooms <- partial(
+  object = house_rf,
+  pred.var = "bedrooms",
+  train = house_sample[, house_features],
+  grid.resolution = 20,
+  progress = "none"
+)
+
+p_house_bedrooms <- plot_house_pdp_1d(
+  pdp_house_bedrooms,
+  feature = "bedrooms",
+  title = "Partial Dependence of House Price on Bedrooms",
+  x_label = "Bedrooms"
+)
+
+p_house_bedrooms
+ggsave("figures/house_pdp_bedrooms.png", p_house_bedrooms, width = 9, height = 5.5, dpi = 300)
+```
+
+**Interpretation.** The bedrooms PDP shows a moderate positive effect from one to about three bedrooms, followed by a plateau. The predicted price increases from roughly the mid-\$530,000 range for very low bedroom counts to approximately the high-\$580,000 / low-\$590,000 range around three bedrooms. After that, the curve becomes almost flat.
+
+The correct data science interpretation is that `bedrooms` is useful, but it is not the main driver once the model averages over the other variables. A higher number of bedrooms often indicates a larger house, but that information is already captured more directly by `sqft_living`. Therefore, after a normal number of bedrooms, adding more bedrooms does not necessarily increase the model prediction much.
+
+This is also a good example of a PDP limitation. Bedrooms are correlated with living area and bathrooms. The PDP isolates the average model response to bedrooms, but it does not mean that adding bedrooms causally increases price by itself. It means that, in the fitted Random Forest, bedroom count has a modest positive marginal association, weaker and less direct than the area variables.
+
+## Bathrooms
+
+```{r house-pdp-bathrooms}
+pdp_house_bathrooms <- partial(
+  object = house_rf,
+  pred.var = "bathrooms",
+  train = house_sample[, house_features],
+  grid.resolution = 20,
+  progress = "none"
+)
+
+p_house_bathrooms <- plot_house_pdp_1d(
+  pdp_house_bathrooms,
+  feature = "bathrooms",
+  title = "Partial Dependence of House Price on Bathrooms",
+  x_label = "Bathrooms"
+)
+
+p_house_bathrooms
+ggsave("figures/house_pdp_bathrooms.png", p_house_bathrooms, width = 9, height = 5.5, dpi = 300)
+```
+
+**Interpretation.** The bathrooms PDP shows a strong positive relationship. Predicted price rises progressively from lower bathroom counts to higher bathroom counts, with a particularly sharp increase after approximately four to five bathrooms. This indicates that the Random Forest treats high bathroom counts as a signal of more expensive properties.
+
+The effect is not simply linear. The curve increases gradually at first and then accelerates in the upper range. This is consistent with the housing domain: a small increase from one to two bathrooms may reflect a normal family home, while very high bathroom counts often correspond to large or luxury houses.
+
+The rug marks show that the highest bathroom values are relatively sparse. Therefore, the extreme right side of the PDP should be interpreted cautiously. The model clearly associates more bathrooms with higher prices, but the most reliable part of the curve is where the sample contains more observations. As with bedrooms, bathrooms are also correlated with living area, so this should be read as the Random Forest's marginal behavior rather than a direct causal effect.
+
+## Living area
+
+```{r house-pdp-sqft-living}
+pdp_house_sqft_living <- partial(
+  object = house_rf,
+  pred.var = "sqft_living",
+  train = house_sample[, house_features],
+  grid.resolution = 30,
+  progress = "none"
+)
+
+p_house_sqft_living <- plot_house_pdp_1d(
+  pdp_house_sqft_living,
+  feature = "sqft_living",
+  title = "Partial Dependence of House Price on Living Area",
+  x_label = "Living area (sqft)"
+)
+
+p_house_sqft_living
+ggsave("figures/house_pdp_sqft_living.png", p_house_sqft_living, width = 9, height = 5.5, dpi = 300)
+```
+
+**Interpretation.** The `sqft_living` PDP is the clearest and strongest relationship in the house-price model. The curve increases almost monotonically: houses with low living area are predicted around the lower price range, while large houses reach predictions well above one million dollars. The increase is especially strong from roughly 2,000 to 4,500 square feet and again in the higher range of the plot.
+
+This result is highly coherent with the real-estate problem. Living area is a direct measure of usable house size, so it is expected to be one of the strongest predictors of price. Unlike bedrooms or floors, `sqft_living` directly quantifies the scale of the property.
+
+The shape is nonlinear. The model does not add the same amount of predicted price for each additional square foot across the whole range. There are zones where the curve rises more quickly, suggesting that the Random Forest identifies premium effects for larger properties. However, the rug marks show that very large houses are less frequent than medium-sized houses. Therefore, the middle range has stronger empirical support, while the far-right part should be treated with more caution.
+
+## Floors
+
+```{r house-pdp-floors}
+pdp_house_floors <- partial(
+  object = house_rf,
+  pred.var = "floors",
+  train = house_sample[, house_features],
+  grid.resolution = 10,
+  progress = "none"
+)
+
+p_house_floors <- plot_house_pdp_1d(
+  pdp_house_floors,
+  feature = "floors",
+  title = "Partial Dependence of House Price on Number of Floors",
+  x_label = "Floors"
+)
+
+p_house_floors
+ggsave("figures/house_pdp_floors.png", p_house_floors, width = 9, height = 5.5, dpi = 300)
+```
+
+**Interpretation.** The floors PDP is much weaker and more irregular than the `sqft_living` or `bathrooms` PDPs. The predicted price varies within a relatively narrow band compared with the other house variables. There is no stable monotonic increase across the full range. In fact, the curve drops around some intermediate floor values and then partially recovers.
+
+This suggests that the number of floors is not a direct pricing driver in this model. It may encode architectural type or property style, but it does not measure size as directly as `sqft_living`. A one-floor house can be expensive if it is large and well located, while a multi-floor house is not necessarily expensive if its total living area is limited.
+
+The irregular shape is also linked to support. Some floor values are uncommon, as shown by the sparse rug marks. For rare values, the PDP is more sensitive to the particular sample and to interactions with other variables. Therefore, the professional conclusion is that `floors` has limited marginal explanatory power compared with living area and bathrooms, and its PDP should be interpreted cautiously.
+
+# Deployment and ModelOps considerations
+
+Although this practice does not require deploying a production API, it is related to the deployment theory because it follows basic ModelOps principles:
+
+-   the data transformation is explicit;
+-   the random seeds are fixed;
+-   the model training process is reproducible;
+-   the output figures are saved;
+-   the notebook can be versioned with Git;
+-   the final project can be backed up in GitHub.
+
+In a real deployment scenario, the bike rental model could be exposed as a server-side API. A request would contain weather and calendar variables, the server would validate and preprocess the request, run the Random Forest model, and return the predicted bike count. The PDP analysis would be useful before deployment because it checks whether the model has learned coherent relationships, such as higher demand under comfortable temperatures and lower demand under very humid or windy conditions.
+
+For the house price model, a similar deployment could be implemented as a batch or interactive prediction service. However, because house price prediction can affect financial decisions, interpretability is especially relevant for auditing the model before use.
+
+# Conclusions
+
+This notebook has applied Partial Dependence Plots as a model-agnostic interpretability method for two regression problems.
+
+For bike rental demand, the PDPs allow us to inspect the average influence of time, temperature, humidity and wind speed on predicted bike counts. The two-dimensional PDP further shows the joint effect of temperature and humidity using the heatmap style shown in class, with a sample of 50 observations and rug marks to visualize data density.
+
+For house price prediction, the PDPs show how the Random Forest uses bedrooms, bathrooms, living area and floors to predict price. The strongest and most interpretable relationship is expected for `sqft_living`, while variables such as bedrooms and floors require more careful interpretation because their effect depends on the rest of the house characteristics.
+
+Overall, the analysis demonstrates how PDPs help audit black-box models by transforming their learned behavior into visual, human-readable explanations.

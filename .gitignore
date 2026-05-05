@@ -1,0 +1,22 @@
+.Rhistory
+.RData
+.Rproj.user/
+__pycache__/
+.DS_Store
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.pdf
+*.auxlock
+*.fls
+*.fdb_latexmk
+*.gz
+
+# RStudio files
+.Rhistory
+.Ruserdata
+
+# Temporary files
+*.Rproj
