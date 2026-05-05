@@ -1,0 +1,29 @@
+# One-dimensional PDPs for house price prediction
+
+This fragment contains the helper and calls for `bedrooms`, `bathrooms`, `sqft_living`, and `floors`. See the main notebook for full plotting code. 
+
+```{r helper-house-pdp}
+plot_house_pdp_1d <- function(pdp_data, feature, title, x_label) {
+  ggplot(pdp_data, aes(x = .data[[feature]], y = yhat)) +
+    geom_line(size = 1, color = "#2D4F73") +
+    geom_rug(
+      data = house_sample,
+      aes(x = .data[[feature]]),
+      inherit.aes = FALSE,
+      sides = "b",
+      alpha = 0.2,
+      color = "#5A4635"
+    ) +
+    scale_y_continuous(labels = scales::dollar_format(prefix = "$")) +
+    labs(
+      title = title,
+      x = x_label,
+      y = "Predicted house price"
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(
+      plot.title = element_text(face = "bold"),
+      panel.grid.minor = element_blank()
+    )
+}
+```
