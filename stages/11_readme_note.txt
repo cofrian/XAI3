@@ -1,0 +1,1 @@
+These staged fragments were created to allow progressive commits and merges demonstrating a stepwise MLOps workflow. Each stage will be added on its own branch and merged into `main` with descriptive merge messages.
