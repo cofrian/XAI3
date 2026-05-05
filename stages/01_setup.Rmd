@@ -1,0 +1,27 @@
+---
+title: "Stage 01 — Setup and reproducibility"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 9,
+  fig.height = 5.5,
+  fig.align = "center"
+)
+
+set.seed(123)
+if (!dir.exists("figures")) dir.create("figures")
+
+regression_metrics <- function(actual, predicted) {
+  data.frame(
+    RMSE = sqrt(mean((actual - predicted)^2)),
+    MAE = mean(abs(actual - predicted)),
+    R2 = 1 - sum((actual - predicted)^2) / sum((actual - mean(actual))^2),
+    row.names = NULL
+  )
+}
+```
